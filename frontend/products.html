@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Products — Ansh Mart</title>
+  <meta name="description" content="Browse all products at Ansh Mart. Filter by category and search for the perfect item.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="navbar"></nav>
+
+<div class="container" style="padding-top:2rem;padding-bottom:3rem;">
+  <h1 class="section-title">All Products</h1>
+  <p class="section-subtitle">Browse our full catalog</p>
+
+  <!-- Filter Bar -->
+  <div class="filter-bar">
+    <input type="text" id="search-input" class="form-control" placeholder="🔍  Search products…" style="max-width:320px;">
+    <div class="category-pills" id="category-pills">
+      <button class="category-pill active" data-cat="All">All</button>
+    </div>
+  </div>
+
+  <!-- Products Grid -->
+  <div id="products-grid" class="products-grid">
+    <div class="spinner-wrap" style="grid-column:1/-1;"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- Product Detail Modal -->
+<div class="modal-backdrop" id="detail-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Product Details</h3>
+      <button class="modal-close" id="modal-close">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modal-close-btn">Close</button>
+      <button class="btn btn-primary" id="modal-add-cart">🛒 Add to Cart</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+<script>
+  let allProducts   = [];
+  let activeCategory = 'All';
+  let searchQuery    = '';
+  let modalProduct   = null;
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    renderNavbar('products');
+
+    // Check for category param in URL
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('category')) {
+      activeCategory = params.get('category');
+    }
+
+    await loadCategories();
+    await loadProducts();
+
+    // Search debounce
+    let debounce;
+    document.getElementById('search-input').addEventListener('input', e => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        searchQuery = e.target.value.trim();
+        renderGrid();
+      }, 300);
+    });
+
+    // Modal close
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+    document.getElementById('detail-modal').addEventListener('click', e => {
+      if (e.target === e.currentTarget) closeModal();
+    });
+    document.getElementById('modal-add-cart').addEventListener('click', () => {
+      if (!modalProduct) return;
+      Cart.addItem(modalProduct);
+      showToast(`Added "${modalProduct.name}" to cart!`);
+      closeModal();
+    });
+  });
+
+  async function loadCategories() {
+    try {
+      const cats = await api.get('/products/categories');
+      const pills = document.getElementById('category-pills');
+      cats.forEach(cat => {
+        const btn = document.createElement('button');
+        btn.className = 'category-pill' + (cat === activeCategory ? ' active' : '');
+        btn.dataset.cat = cat;
+        btn.textContent = cat;
+        pills.appendChild(btn);
+      });
+
+      // Set active from URL
+      if (activeCategory !== 'All') {
+        pills.querySelector('[data-cat="All"]')?.classList.remove('active');
+      }
+
+      pills.addEventListener('click', e => {
+        const pill = e.target.closest('.category-pill');
+        if (!pill) return;
+        pills.querySelectorAll('.category-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        activeCategory = pill.dataset.cat;
+        renderGrid();
+      });
+    } catch (err) {
+      console.error('Categories load error:', err);
+    }
+  }
+
+  async function loadProducts() {
+    const grid = document.getElementById('products-grid');
+    try {
+      allProducts = await api.get('/products');
+      renderGrid();
+    } catch (err) {
+      grid.innerHTML = `<div class="alert alert-danger" style="grid-column:1/-1;">❌ ${err.message}</div>`;
+    }
+  }
+
+  function renderGrid() {
+    const grid = document.getElementById('products-grid');
+    let filtered = allProducts;
+
+    if (activeCategory && activeCategory !== 'All') {
+      filtered = filtered.filter(p => p.category === activeCategory);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(p =>
+        p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `
+        <div class="empty-state" style="grid-column:1/-1;">
+          <div class="icon">🔍</div>
+          <h3>No products found</h3>
+          <p>Try a different search term or category.</p>
+        </div>`;
+      return;
+    }
+
+    grid.innerHTML = filtered.map(p => productCard(p)).join('');
+
+    grid.querySelectorAll('.add-to-cart-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const product = allProducts.find(p => p.id === parseInt(btn.dataset.id));
+        if (!product) return;
+        Cart.addItem(product);
+        showToast(`Added "${product.name}" to cart!`);
+      });
+    });
+
+    grid.querySelectorAll('.view-product-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const product = allProducts.find(p => p.id === parseInt(btn.dataset.id));
+        if (product) openModal(product);
+      });
+    });
+  }
+
+  function productCard(p) {
+    const stock = parseInt(p.stock);
+    const stockLabel = stock === 0 ? `<span style="color:var(--danger)">Out of Stock</span>`
+                     : stock <= 5  ? `<span style="color:var(--warning)">⚠ Only ${stock} left</span>`
+                     : `<span style="color:var(--success)">✔ In Stock (${stock})</span>`;
+    return `
+      <div class="product-card">
+        <div class="product-img-wrap">
+          <img src="${p.image_url || 'https://placehold.co/400x400?text=Product'}"
+               alt="${p.name}" class="product-img"
+               onerror="this.src='https://placehold.co/400x400?text=No+Image'">
+          <span class="product-category-badge">${p.category}</span>
+        </div>
+        <div class="product-body">
+          <div class="product-name">${p.name}</div>
+          <div class="product-desc">${p.description || ''}</div>
+          <div class="product-price">${formatCurrency(p.price)}</div>
+          <div class="product-stock">${stockLabel}</div>
+          <div class="product-actions">
+            <button class="btn btn-primary btn-sm add-to-cart-btn"
+                    data-id="${p.id}" ${stock === 0 ? 'disabled' : ''}>
+              🛒 Add
+            </button>
+            <button class="btn btn-outline btn-sm view-product-btn" data-id="${p.id}">
+              👁 View
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function openModal(product) {
+    modalProduct = product;
+    const stock = parseInt(product.stock);
+    document.getElementById('modal-title').textContent = product.name;
+    document.getElementById('modal-body').innerHTML = `
+      <img src="${product.image_url || 'https://placehold.co/520x300?text=Product'}"
+           alt="${product.name}"
+           style="width:100%;max-height:280px;object-fit:cover;border-radius:var(--radius-sm);margin-bottom:1rem;"
+           onerror="this.src='https://placehold.co/520x300?text=No+Image'">
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem;">
+        <span class="badge" style="background:var(--primary-light);color:var(--primary);">${product.category}</span>
+        ${stock === 0
+          ? '<span class="badge" style="background:#fee2e2;color:var(--danger);">Out of Stock</span>'
+          : `<span class="badge" style="background:#d1fae5;color:var(--success);">In Stock (${stock})</span>`}
+      </div>
+      <div style="font-size:1.5rem;font-weight:800;color:var(--primary);margin-bottom:.75rem;">${formatCurrency(product.price)}</div>
+      <p style="color:var(--text-muted);line-height:1.7;">${product.description || 'No description available.'}</p>
+    `;
+    const addBtn = document.getElementById('modal-add-cart');
+    addBtn.disabled = stock === 0;
+    document.getElementById('detail-modal').classList.add('visible');
+  }
+
+  function closeModal() {
+    document.getElementById('detail-modal').classList.remove('visible');
+    modalProduct = null;
+  }
+</script>
+</body>
+</html>

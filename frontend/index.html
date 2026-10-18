@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ansh Mart — Premium Online Shopping</title>
+  <meta name="description" content="Shop the latest electronics, clothing, books and more at Ansh Mart. Fast delivery, great prices.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar" id="navbar"></nav>
+
+<!-- Hero Section -->
+<section class="hero">
+  <div class="container">
+    <h1>Welcome to Ansh Mart 🛍️</h1>
+    <p>Discover amazing products at unbeatable prices. Electronics, fashion, books and more — all in one place.</p>
+    <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+      <a href="products.html" class="btn btn-primary btn-lg">Shop Now →</a>
+      <a href="#featured" class="btn btn-outline btn-lg" style="border-color:#fff;color:#fff;">View Featured</a>
+    </div>
+  </div>
+</section>
+
+<!-- Features Strip -->
+<div style="background:var(--surface);border-bottom:1px solid var(--border);">
+  <div class="container" style="display:flex;flex-wrap:wrap;gap:0;justify-content:space-around;padding:1.25rem 1.5rem;">
+    <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 1rem;font-size:.9rem;font-weight:600;color:var(--text-muted);">🚚 <span>Free Shipping over ₹999</span></div>
+    <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 1rem;font-size:.9rem;font-weight:600;color:var(--text-muted);">🔒 <span>Secure Checkout</span></div>
+    <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 1rem;font-size:.9rem;font-weight:600;color:var(--text-muted);">💳 <span>Cash on Delivery</span></div>
+    <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 1rem;font-size:.9rem;font-weight:600;color:var(--text-muted);">📦 <span>Easy Returns</span></div>
+  </div>
+</div>
+
+<!-- Featured Products -->
+<section class="section" id="featured">
+  <div class="container">
+    <h2 class="section-title">Featured Products</h2>
+    <p class="section-subtitle">Hand-picked deals just for you</p>
+
+    <div id="featured-grid" class="products-grid">
+      <div class="spinner-wrap"><div class="spinner"></div></div>
+    </div>
+
+    <div style="text-align:center;margin-top:2rem;">
+      <a href="products.html" class="btn btn-outline btn-lg">View All Products →</a>
+    </div>
+  </div>
+</section>
+
+<!-- Categories Strip -->
+<section style="background:var(--surface);padding:3rem 0;border-top:1px solid var(--border);">
+  <div class="container">
+    <h2 class="section-title" style="text-align:center;">Shop by Category</h2>
+    <p class="section-subtitle" style="text-align:center;">Find exactly what you need</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-top:1.5rem;" id="cat-grid">
+      <div class="spinner-wrap"><div class="spinner"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+<script>
+  const catColors = {
+    'Electronics':  { bg: '#ede9ff', color: '#6C63FF', icon: '💻' },
+    'Clothing':     { bg: '#ffe4ea', color: '#FF6584', icon: '👕' },
+    'Books':        { bg: '#fef3c7', color: '#d97706', icon: '📚' },
+    'Home & Kitchen': { bg: '#d1fae5', color: '#10b981', icon: '🏠' },
+  };
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    renderNavbar('home');
+    await loadFeatured();
+    await loadCategories();
+  });
+
+  async function loadFeatured() {
+    const grid = document.getElementById('featured-grid');
+    try {
+      const products = await api.get('/products');
+      const featured  = products.slice(0, 8);
+      if (featured.length === 0) {
+        grid.innerHTML = `<p style="color:var(--text-muted);grid-column:1/-1;">No products found.</p>`;
+        return;
+      }
+      grid.innerHTML = featured.map(p => productCard(p)).join('');
+      attachAddToCart(grid);
+    } catch (err) {
+      grid.innerHTML = `<div class="alert alert-danger" style="grid-column:1/-1;">❌ ${err.message}</div>`;
+    }
+  }
+
+  async function loadCategories() {
+    const grid = document.getElementById('cat-grid');
+    try {
+      const cats = await api.get('/products/categories');
+      grid.innerHTML = cats.map(cat => {
+        const meta = catColors[cat] || { bg: '#f1f0fa', color: '#6b7280', icon: '🏷️' };
+        return `
+          <a href="products.html?category=${encodeURIComponent(cat)}" class="card"
+             style="background:${meta.bg};border:none;text-align:center;padding:1.5rem;text-decoration:none;transition:transform .2s;">
+            <div style="font-size:2.5rem;margin-bottom:.6rem;">${meta.icon}</div>
+            <div style="font-weight:700;font-size:1rem;color:${meta.color};">${cat}</div>
+          </a>`;
+      }).join('');
+    } catch {
+      grid.innerHTML = '';
+    }
+  }
+
+  function productCard(p) {
+    const stock = parseInt(p.stock);
+    const stockLabel = stock === 0 ? '<span class="out-stock">Out of Stock</span>'
+                     : stock <= 5  ? `<span class="low-stock">⚠ Only ${stock} left</span>`
+                     : `<span style="color:var(--success)">✔ In Stock</span>`;
+    return `
+      <div class="product-card">
+        <div class="product-img-wrap">
+          <img src="${p.image_url || 'https://placehold.co/400x400?text=Product'}"
+               alt="${p.name}" class="product-img"
+               onerror="this.src='https://placehold.co/400x400?text=No+Image'">
+          <span class="product-category-badge">${p.category}</span>
+        </div>
+        <div class="product-body">
+          <div class="product-name">${p.name}</div>
+          <div class="product-desc">${p.description || ''}</div>
+          <div class="product-price">${formatCurrency(p.price)}</div>
+          <div class="product-stock">${stockLabel}</div>
+          <div class="product-actions">
+            <button class="btn btn-primary btn-sm add-to-cart-btn"
+                    data-id="${p.id}" data-name="${p.name}"
+                    data-price="${p.price}" data-image="${p.image_url}"
+                    data-stock="${p.stock}"
+                    ${stock === 0 ? 'disabled' : ''}>
+              🛒 Add to Cart
+            </button>
+            <a href="product.html?id=${p.id}" class="btn btn-outline btn-sm">View</a>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function attachAddToCart(container) {
+    container.querySelectorAll('.add-to-cart-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        Cart.addItem({
+          id:        parseInt(btn.dataset.id),
+          name:      btn.dataset.name,
+          price:     parseFloat(btn.dataset.price),
+          image_url: btn.dataset.image,
+          stock:     parseInt(btn.dataset.stock),
+        });
+        showToast(`Added "${btn.dataset.name}" to cart!`);
+        Cart.updateBadge();
+      });
+    });
+  }
+</script>
+</body>
+</html>

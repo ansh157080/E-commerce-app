@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login / Register — Ansh Mart</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <h2>Ansh Mart 🛍️</h2>
+      <p id="auth-subtitle">Sign in to your account</p>
+    </div>
+
+    <div id="global-alert"></div>
+
+    <!-- Login Form -->
+    <form id="login-form" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="login-email">Email Address</label>
+        <input type="email" id="login-email" class="form-control" placeholder="you@example.com" required autocomplete="email">
+        <div class="field-error" id="err-login-email"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="login-password">Password</label>
+        <input type="password" id="login-password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+        <div class="field-error" id="err-login-password"></div>
+      </div>
+      <button type="submit" id="login-btn" class="btn btn-primary" style="width:100%;margin-top:.5rem;">🔑 Sign In</button>
+    </form>
+
+    <!-- Register Form (hidden initially) -->
+    <form id="register-form" style="display:none;" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="reg-name">Full Name</label>
+        <input type="text" id="reg-name" class="form-control" placeholder="John Doe" required autocomplete="name">
+        <div class="field-error" id="err-reg-name"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="reg-email">Email Address</label>
+        <input type="email" id="reg-email" class="form-control" placeholder="you@example.com" required autocomplete="email">
+        <div class="field-error" id="err-reg-email"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="reg-password">Password <small style="color:var(--text-muted);font-weight:400;">(min 6 chars)</small></label>
+        <input type="password" id="reg-password" class="form-control" placeholder="••••••••" required autocomplete="new-password">
+        <div class="field-error" id="err-reg-password"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="reg-confirm">Confirm Password</label>
+        <input type="password" id="reg-confirm" class="form-control" placeholder="••••••••" required autocomplete="new-password">
+        <div class="field-error" id="err-reg-confirm"></div>
+      </div>
+      <button type="submit" id="register-btn" class="btn btn-primary" style="width:100%;margin-top:.5rem;">✅ Create Account</button>
+    </form>
+
+    <div class="auth-switch">
+      <span id="switch-text">Don't have an account?</span>
+      <a href="#" id="form-toggle">Sign up</a>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+<script>
+  // Redirect if already logged in
+  if (getToken()) {
+    const u = getUser();
+    window.location.href = u?.role === 'admin' ? 'admin.html' : 'index.html';
+  }
+
+  let isLogin = true;
+
+  document.getElementById('form-toggle').addEventListener('click', e => {
+    e.preventDefault();
+    isLogin = !isLogin;
+    document.getElementById('login-form').style.display    = isLogin ? '' : 'none';
+    document.getElementById('register-form').style.display = isLogin ? 'none' : '';
+    document.getElementById('auth-subtitle').textContent   = isLogin ? 'Sign in to your account' : 'Create your account';
+    document.getElementById('switch-text').textContent     = isLogin ? "Don't have an account?" : 'Already have an account?';
+    document.getElementById('form-toggle').textContent     = isLogin ? 'Sign up' : 'Sign in';
+    document.getElementById('global-alert').innerHTML      = '';
+    clearErrors();
+  });
+
+  // ─── Login ──────────────────────────────────────────────
+  document.getElementById('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    clearErrors();
+    const email    = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+
+    let valid = true;
+    if (!email) { showFieldError('err-login-email', 'Email is required.'); valid = false; }
+    if (!password) { showFieldError('err-login-password', 'Password is required.'); valid = false; }
+    if (!valid) return;
+
+    const btn = document.getElementById('login-btn');
+    btn.disabled = true; btn.textContent = '⏳ Signing in…';
+
+    try {
+      const res = await api.post('/auth/login', { email, password });
+      saveAuth(res.token, res.user);
+      showToast('Login successful! Redirecting…');
+      setTimeout(() => {
+        window.location.href = res.user.role === 'admin' ? 'admin.html' : 'index.html';
+      }, 600);
+    } catch (err) {
+      showGlobalAlert(err.message, 'danger');
+      btn.disabled = false; btn.textContent = '🔑 Sign In';
+    }
+  });
+
+  // ─── Register ────────────────────────────────────────────
+  document.getElementById('register-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    clearErrors();
+    const name     = document.getElementById('reg-name').value.trim();
+    const email    = document.getElementById('reg-email').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const confirm  = document.getElementById('reg-confirm').value;
+
+    let valid = true;
+    if (!name || name.length < 2)       { showFieldError('err-reg-name',     'Name must be at least 2 characters.'); valid = false; }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showFieldError('err-reg-email', 'Enter a valid email.'); valid = false; }
+    if (!password || password.length < 6) { showFieldError('err-reg-password', 'Password must be at least 6 characters.'); valid = false; }
+    if (password !== confirm)            { showFieldError('err-reg-confirm',   'Passwords do not match.'); valid = false; }
+    if (!valid) return;
+
+    const btn = document.getElementById('register-btn');
+    btn.disabled = true; btn.textContent = '⏳ Creating Account…';
+
+    try {
+      const res = await api.post('/auth/register', { name, email, password });
+      saveAuth(res.token, res.user);
+      showToast('Account created! Redirecting…');
+      setTimeout(() => window.location.href = 'index.html', 600);
+    } catch (err) {
+      showGlobalAlert(err.message, 'danger');
+      btn.disabled = false; btn.textContent = '✅ Create Account';
+    }
+  });
+
+  function showFieldError(id, msg) {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = msg; }
+  }
+  function showGlobalAlert(msg, type = 'danger') {
+    document.getElementById('global-alert').innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  }
+  function clearErrors() {
+    document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+    document.getElementById('global-alert').innerHTML = '';
+  }
+</script>
+</body>
+</html>
